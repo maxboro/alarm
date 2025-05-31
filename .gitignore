@@ -3,3 +3,7 @@ logs/
 build/
 bin/
 exec
+avenv/
+test_videos/
+test_output/
+yolo*.pt
