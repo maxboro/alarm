@@ -7,39 +7,33 @@ Example
 """
 import argparse
 import cv2
-from ultralytics import YOLO
-
+import time
+from alarm.model import YoloTFLite1Class
 
 COLOR_DETECTION = (255, 0, 0)
 COLOR_TRESPASSING = (0, 0, 255)
+SLOW = True
 
-def process_frame(frame, yolo):
-    results = yolo.track(frame, stream=True)
-    for result in results:
-        # iterate over each box
-        for box in result.boxes:
-            object_cls = int(box.cls[0])
-            class_name = result.names[object_cls]
+def draw_detections(frame, xyxy_array, imW, imH):
+    for ind in range(len(xyxy_array)):
+        x1, y1, x2, y2 = xyxy_array[ind]
+        x1 = int(x1 * imW)
+        y1 = int(y1 * imH)
+        x2 = int(x2 * imW)
+        y2 = int(y2 * imH)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_DETECTION, 2)
 
-            # filter by confidence
-            if box.conf[0] > 0.4 and class_name == "person":
-                [x1, y1, x2, y2] = [int(coord) for coord in box.xyxy[0]]
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_DETECTION, 2)
-
-                # put the class name and confidence on the image
-                cv2.putText(
-                    frame,
-                    f'{class_name} {box.conf[0]:.2f}',
-                    (x1, y1),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1, COLOR_DETECTION, 2
-                )
-    return False # temporaly
+def check_alarm_conditions(xywh_array):
+    return False
 
 def start_runtime_loop(args: argparse.Namespace):
     # Load the model
-    yolo = YOLO(args.model)
+    yolo = YoloTFLite1Class(
+        path=args.model,
+        target_class_id=0, # person
+        iou_thr=0.6,
+        conf_thr=0.3
+    )
 
     # init video capture
     file = args.test_file_path if args.test_file_path else 0
@@ -57,23 +51,28 @@ def start_runtime_loop(args: argparse.Namespace):
 
     print("Video processing started")
     while True:
+        if SLOW: time.sleep(2)
         ret, frame = video.read()
         if not ret:
             continue
         print("Got frame")
-        run_alarm = process_frame(frame, yolo)
+        results = yolo.track(frame)
+        draw_detections(frame, results.xyxy_array, imW, imH)
+        run_alarm = check_alarm_conditions(results.xywh_array)
+
+        if run_alarm:
+            print("Alarm")
 
         if args.display_video:
             cv2.imshow('frame', frame)
+            # break the loop if 'q' is pressed
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
         if args.save_video:
             out.write(frame)
-
-        # break the loop if 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
     
-    # ckeaning
+    # cleaning
     video.release()
     cv2.destroyAllWindows()
     if args.save_video:
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--model', 
         type=str,
-        default="yolov8n.pt",
+        default="./yolov8n_saved_model/yolov8n_float16.tflite",
         help = 'Object detection model name to use.'
     )
     parser.add_argument(
