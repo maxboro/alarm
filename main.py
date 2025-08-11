@@ -10,12 +10,12 @@ import cv2
 import time
 import yaml
 import numpy as np
-from alarm.model import YoloTFLite1Class
+from alarm.model import YoloTFLite1Class, Detections
 
 COLOR_DETECTION = (0, 255, 0)
 COLOR_TRESPASSING = (0, 0, 255)
 
-def draw_detections(frame, results, imW, imH, trespassed_indxs):
+def draw_detections(frame: np.ndarray, results: Detections, imW: int, imH: int, trespassed_indxs: np.ndarray):
     for ind in range(len(results.xyxy_array)):
         x1, y1, x2, y2 = results.xyxy_array[ind]
         x1 = int(x1 * imW)
@@ -37,7 +37,7 @@ def draw_detections(frame, results, imW, imH, trespassed_indxs):
             1, color, 2
         )
 
-def read_settings():
+def read_settings() -> dict:
     with open("settings.yaml", "r") as settings_file:
         settings = yaml.safe_load(settings_file)
     return settings
@@ -47,14 +47,14 @@ def get_tresspassed(xywh_array: np.ndarray, settings: dict) -> np.ndarray:
     trespassed_indxs = person_areas > settings["activation_area"]
     return trespassed_indxs
 
-def alarm_manager(frame, trespassed_indxs):
+def alarm_manager(frame: np.ndarray, trespassed_indxs: np.ndarray):
     if trespassed_indxs.sum() > 0:
         print("Alarm")
         cv2.putText(
-            frame, 
+            frame,
             'Alarm', 
-            (10, 10), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
+            (10, 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
             1,
             COLOR_TRESPASSING, 2
         )
@@ -102,10 +102,10 @@ def start_runtime_loop(args: argparse.Namespace):
 
         if args.save_video:
             out.write(frame)
-        
+
         if settings["slow"]:
             time.sleep(2)
-    
+
     # cleaning
     video.release()
     cv2.destroyAllWindows()

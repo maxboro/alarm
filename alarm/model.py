@@ -11,8 +11,9 @@ class Detections:
     xyxy_array: np.ndarray
     conf_array: np.ndarray
 
+
 class YoloTFLite1Class:
-    def __init__(self, path, target_class_id, iou_thr, conf_thr):
+    def __init__(self, path: str, target_class_id: int, iou_thr: float, conf_thr: float):
         self.interpreter = tf.lite.Interpreter(model_path=path)
         self.interpreter.allocate_tensors()
         self.input_details = self.interpreter.get_input_details()
@@ -21,7 +22,7 @@ class YoloTFLite1Class:
         self.iou_thr = iou_thr
         self.conf_thr = conf_thr
 
-    def _get_output(self, frame):
+    def _get_output(self, frame: np.ndarray):
         """Raw output from tflite model, (1, 84, 8400) shaped vector."""
         self.interpreter.set_tensor(self.input_details[0]['index'], frame)
         self.interpreter.invoke()
@@ -53,7 +54,7 @@ class YoloTFLite1Class:
         inp = (cv2.resize(frame, (640, 640)) / 255.0).astype(np.float32)
         inp = np.expand_dims(inp, 0)
         return inp
-    
+
     def track(self, frame: np.ndarray)-> Detections:
         inp = self._preprocess_frame(frame)
         output_data = self._get_output(inp)

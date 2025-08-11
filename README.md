@@ -1,5 +1,5 @@
 # Desctiption
-Detecting people in close proximity.
+Detect people in close proximity and trigger the alarm
 
 
 # How to run
