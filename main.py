@@ -7,39 +7,67 @@ Example
 """
 import argparse
 import cv2
-from ultralytics import YOLO
+import time
+import yaml
+import numpy as np
+from alarm.model import YoloTFLite1Class, Detections
 
-
-COLOR_DETECTION = (255, 0, 0)
+COLOR_DETECTION = (0, 255, 0)
 COLOR_TRESPASSING = (0, 0, 255)
 
-def process_frame(frame, yolo):
-    results = yolo.track(frame, stream=True)
-    for result in results:
-        # iterate over each box
-        for box in result.boxes:
-            object_cls = int(box.cls[0])
-            class_name = result.names[object_cls]
+def draw_detections(frame: np.ndarray, results: Detections, imW: int, imH: int, trespassed_indxs: np.ndarray):
+    for ind in range(len(results.xyxy_array)):
+        x1, y1, x2, y2 = results.xyxy_array[ind]
+        x1 = int(x1 * imW)
+        y1 = int(y1 * imH)
+        x2 = int(x2 * imW)
+        y2 = int(y2 * imH)
+        if trespassed_indxs[ind]:
+            color = COLOR_TRESPASSING
+            status = 'close'
+        else:
+            color = COLOR_DETECTION
+            status = 'far'
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            frame,
+            f'Person {status} {results.conf_array[ind]:.2f}',
+            (x1, y1),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1, color, 2
+        )
 
-            # filter by confidence
-            if box.conf[0] > 0.4 and class_name == "person":
-                [x1, y1, x2, y2] = [int(coord) for coord in box.xyxy[0]]
+def read_settings() -> dict:
+    with open("settings.yaml", "r") as settings_file:
+        settings = yaml.safe_load(settings_file)
+    return settings
 
-                cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_DETECTION, 2)
+def get_tresspassed(xywh_array: np.ndarray, settings: dict) -> np.ndarray:
+    person_areas = xywh_array[:, 2] * xywh_array[:, 3]
+    trespassed_indxs = person_areas > settings["activation_area"]
+    return trespassed_indxs
 
-                # put the class name and confidence on the image
-                cv2.putText(
-                    frame,
-                    f'{class_name} {box.conf[0]:.2f}',
-                    (x1, y1),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1, COLOR_DETECTION, 2
-                )
-    return False # temporaly
+def alarm_manager(frame: np.ndarray, trespassed_indxs: np.ndarray):
+    if trespassed_indxs.sum() > 0:
+        print("Alarm")
+        cv2.putText(
+            frame,
+            'Alarm', 
+            (10, 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            COLOR_TRESPASSING, 2
+        )
 
 def start_runtime_loop(args: argparse.Namespace):
+    settings = read_settings()
     # Load the model
-    yolo = YOLO(args.model)
+    yolo = YoloTFLite1Class(
+        path=args.model,
+        target_class_id=0, # person
+        iou_thr=settings["iou_thr"],
+        conf_thr=settings["conf_thr"]
+    )
 
     # init video capture
     file = args.test_file_path if args.test_file_path else 0
@@ -61,19 +89,24 @@ def start_runtime_loop(args: argparse.Namespace):
         if not ret:
             continue
         print("Got frame")
-        run_alarm = process_frame(frame, yolo)
+        results = yolo.track(frame)
+        trespassed_indxs = get_tresspassed(results.xywh_array, settings)
+        alarm_manager(frame, trespassed_indxs)
+        draw_detections(frame, results, imW, imH, trespassed_indxs)
 
         if args.display_video:
             cv2.imshow('frame', frame)
+            # break the loop if 'q' is pressed
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
         if args.save_video:
             out.write(frame)
 
-        # break the loop if 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    
-    # ckeaning
+        if settings["slow"]:
+            time.sleep(2)
+
+    # cleaning
     video.release()
     cv2.destroyAllWindows()
     if args.save_video:
@@ -92,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--model', 
         type=str,
-        default="yolov8n.pt",
+        default="./yolov8n_saved_model/yolov8n_float16.tflite",
         help = 'Object detection model name to use.'
     )
     parser.add_argument(

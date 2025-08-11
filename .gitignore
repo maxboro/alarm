@@ -6,4 +6,9 @@ exec
 avenv/
 test_videos/
 test_output/
-yolo*.pt
+__pycache__
+test_*.py
+calibration*
+fingerprint.pb
+variables
+saved_model.pb

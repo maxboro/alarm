@@ -1,0 +1,5 @@
+slow: True
+activation_area: 0.01
+iou_thr: 0.6
+conf_thr: 0.5
+
