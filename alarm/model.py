@@ -61,14 +61,14 @@ class YoloTFLite1Class:
         xywh_array, conf_array = self._split_to_boxes_and_confidence(output_data)
         xyxy_array = self._xywh2xyxy(xywh_array)
         detected_idx = nms_xyxy_single_class(
-            xyxy_array, 
-            conf_array, 
-            iou_thres=self.iou_thr, 
+            xyxy_array,
+            conf_array,
+            iou_thres=self.iou_thr,
             conf_thres=self.conf_thr
         )
         results = Detections(
-            xywh_array[detected_idx], 
-            xyxy_array[detected_idx], 
+            xywh_array[detected_idx],
+            xyxy_array[detected_idx],
             conf_array[detected_idx]
         )
         return results
