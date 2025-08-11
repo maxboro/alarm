@@ -8,31 +8,65 @@ Example
 import argparse
 import cv2
 import time
+import yaml
+import numpy as np
 from alarm.model import YoloTFLite1Class
 
-COLOR_DETECTION = (255, 0, 0)
+COLOR_DETECTION = (0, 255, 0)
 COLOR_TRESPASSING = (0, 0, 255)
-SLOW = True
 
-def draw_detections(frame, xyxy_array, imW, imH):
-    for ind in range(len(xyxy_array)):
-        x1, y1, x2, y2 = xyxy_array[ind]
+def draw_detections(frame, results, imW, imH, trespassed_indxs):
+    for ind in range(len(results.xyxy_array)):
+        x1, y1, x2, y2 = results.xyxy_array[ind]
         x1 = int(x1 * imW)
         y1 = int(y1 * imH)
         x2 = int(x2 * imW)
         y2 = int(y2 * imH)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR_DETECTION, 2)
+        if trespassed_indxs[ind]:
+            color = COLOR_TRESPASSING
+            status = 'close'
+        else:
+            color = COLOR_DETECTION
+            status = 'far'
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            frame,
+            f'Person {status} {results.conf_array[ind]:.2f}',
+            (x1, y1),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1, color, 2
+        )
 
-def check_alarm_conditions(xywh_array):
-    return False
+def read_settings():
+    with open("settings.yaml", "r") as settings_file:
+        settings = yaml.safe_load(settings_file)
+    return settings
+
+def get_tresspassed(xywh_array: np.ndarray, settings: dict) -> np.ndarray:
+    person_areas = xywh_array[:, 2] * xywh_array[:, 3]
+    trespassed_indxs = person_areas > settings["activation_area"]
+    return trespassed_indxs
+
+def alarm_manager(frame, trespassed_indxs):
+    if trespassed_indxs.sum() > 0:
+        print("Alarm")
+        cv2.putText(
+            frame, 
+            'Alarm', 
+            (10, 10), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            1,
+            COLOR_TRESPASSING, 2
+        )
 
 def start_runtime_loop(args: argparse.Namespace):
+    settings = read_settings()
     # Load the model
     yolo = YoloTFLite1Class(
         path=args.model,
         target_class_id=0, # person
-        iou_thr=0.6,
-        conf_thr=0.3
+        iou_thr=settings["iou_thr"],
+        conf_thr=settings["conf_thr"]
     )
 
     # init video capture
@@ -51,17 +85,14 @@ def start_runtime_loop(args: argparse.Namespace):
 
     print("Video processing started")
     while True:
-        if SLOW: time.sleep(2)
         ret, frame = video.read()
         if not ret:
             continue
         print("Got frame")
         results = yolo.track(frame)
-        draw_detections(frame, results.xyxy_array, imW, imH)
-        run_alarm = check_alarm_conditions(results.xywh_array)
-
-        if run_alarm:
-            print("Alarm")
+        trespassed_indxs = get_tresspassed(results.xywh_array, settings)
+        alarm_manager(frame, trespassed_indxs)
+        draw_detections(frame, results, imW, imH, trespassed_indxs)
 
         if args.display_video:
             cv2.imshow('frame', frame)
@@ -71,6 +102,9 @@ def start_runtime_loop(args: argparse.Namespace):
 
         if args.save_video:
             out.write(frame)
+        
+        if settings["slow"]:
+            time.sleep(2)
     
     # cleaning
     video.release()

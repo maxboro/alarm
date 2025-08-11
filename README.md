@@ -23,3 +23,12 @@ Run using camera:
 ```bash
 python main.py
 ```
+
+# Settings
+- slow  - bool flag to slow down execution
+- activation_area - share of frame for person to take to be considered being close enough for trespassing
+- iou_thr - IoU threshold
+- conf_thr - confidence threshold
+
+# Credits
+I used YOLOv8n model for that. Made by [Ultralytics](https://docs.ultralytics.com/models/yolov8/).
